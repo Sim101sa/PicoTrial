@@ -28,7 +28,7 @@ void step_motor(uint8_t direction, uint32_t delay_ms, uint8_t reverse) {
     while (1) {
         GPIO_ADDR = sequence[step];      // Aplicar el valor del paso al control del motor
         LEDS_ADDR = 1 << step;           // Encender el LED correspondiente al paso del motor
-        delay(1000);
+        delay(1);
         if (direction == 0) {
             step++;
             if (step >= num_steps) {
