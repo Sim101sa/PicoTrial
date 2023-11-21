@@ -1,61 +1,66 @@
 #include <stdint.h>
-#include <stdio.h>
-
-typedef struct {
-    uint16_t stepsPerRev;
-    uint8_t pin1;
-    uint8_t pin2;
-    uint8_t pin3;
-    uint8_t pin4;
-} Stepper;
-
-Stepper stepper_NEMA17 = {200, 8, 9, 10, 11};
-
-
-void loop(void) {
-    // Leer el valor del sensor (simulado)
-    int lecturaSensor = analogRead(CONTROL_VELOCIDAD);
-    // Mapearlo a un rango de 0 a 100
-    int velocidadMotor = map(lecturaSensor, 0, 1023, 0, 100);
-    // Establecer la velocidad del motor
-    if (velocidadMotor > 0) {
-        // Avanzar 1/100 de una revoluci髇
-        for (int i = 0; i < stepper_NEMA17.stepsPerRev / 100; i++) {
-            // Llamar a la funci髇 step (simulado)
-            step();
+// Direcciones de E/S mapeadas en memoria para controlar los pines de E/S
+#define GPIO_ADDR (*(volatile uint32_t*)0x02000008)
+#define LEDS_ADDR (*(volatile uint32_t*)0x03000000)  // Direcci贸n para controlar los LEDs
+// Secuencia de pasos del motor - modo de medio paso
+const uint8_t step_sequence[] = {
+    0b0001,  // Bobina A energizada
+    0b0011,  // Bobinas A y B energizadas
+    0b0010,  // Bobina B energizada
+    0b0110,  // Bobinas B y C energizadas
+    0b0100,  // Bobina C energizada
+    0b1100,  // Bobinas C y D energizadas
+    0b1000,  // Bobina D energizada
+    0b1001   // Bobinas A y D energizadas
+};
+// Funci贸n para generar un retardo en milisegundos
+void delay(uint32_t milliseconds) {
+    for (volatile uint32_t i = 0; i < (milliseconds * 1000); i++) {
+        asm volatile("nop");
+    }
+}
+uint8_t step_sequence_reverse[(sizeof(step_sequence) / sizeof(step_sequence[0]))*250];
+// Funci贸n para controlar el motor paso a paso
+void step_motor(uint8_t direction, uint32_t delay_ms, uint8_t reverse) {
+    const uint8_t* sequence = (reverse == 0) ? step_sequence : step_sequence_reverse;
+    uint16_t num_steps = (sizeof(step_sequence) / sizeof(step_sequence[0]))*250;
+    uint8_t step = (direction == 0) ? 0 : num_steps - 1;
+    while (1) {
+        GPIO_ADDR = sequence[step];      // Aplicar el valor del paso al control del motor
+        LEDS_ADDR = 1 << step;           // Encender el LED correspondiente al paso del motor
+        delay(1000);
+        if (direction == 0) {
+            step++;
+            if (step >= num_steps) {
+                step = 0;
+                delay(delay_ms);
+            }
+        } else {
+            step--;
+            if (step < 0) {
+                step = num_steps - 1;
+                delay(delay_ms);
+            }
+        }
+        delay(delay_ms);
+    }
+}
+int main() {
+    // Crear una copia del array step_sequence y revertirlo
+    for (int i = 0; i < (sizeof(step_sequence) / sizeof(step_sequence[0]))*250; i++) {
+        step_sequence_reverse[i] = step_sequence[(sizeof(step_sequence) / sizeof(step_sequence[0]))*250 - 1 - i];
+    }
+    // Mover el motor paso a paso en una direcci贸n, pausar y luego volver
+    while (1) {
+        // Realizar el movimiento del motor en sentido horario y opuesto 
+        step_motor(0, 1000, 1);  // Direcci贸n: 0 (en sentido horario), Pausa: 1000 ms, Usar reversa
+        // Detener el motor
+        GPIO_ADDR = 0;  // Aplicar 0 al control del motor para detenerlo
+        LEDS_ADDR = 0;  // Apagar todos los LEDs
+        // Esperar 2 horas
+        for (volatile uint32_t i = 0; i < 2 * 60 * 60 * 1000; i++) {
+            delay(1);
         }
     }
-}
-
-int analogRead(uint8_t pin) {
-    // C骴igo para leer el valor anal骻ico del pin (simulado)
-    return 512;
-}
-
-void analogWrite(uint8_t pin, int value) {
-    // C骴igo para escribir el valor anal骻ico en el pin (simulado)
-    printf("Pin: %d, Valor: %d\n", pin, value);
-}
-
-int map(int x, int in_min, int in_max, int out_min, int out_max) {
-    // C骴igo para mapear un valor de entrada a un rango de salida
-    return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
-}
-
-void delay(int ms) {
-    // C骴igo para pausar la ejecuci髇 durante un tiempo determinado (simulado)
-    // Implementaci髇 espec韋ica de la plataforma
-    for (int i = 0; i < ms; i++) {
-        // Simular una pausa de 1 ms
-    }
-}
-
-int main(void) {
-    
-
-    while (1) {
-        loop();
-    }
-
     return 0;
 }
